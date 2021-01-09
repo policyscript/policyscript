@@ -1,18 +1,18 @@
 export interface Position {
 	/**
-	 * 0-based line index.
+	 * 1-indexed line number.
 	 */
 	line: number;
 
 	/**
-	 * 0-based line offset.
+	 * 0-indexed column number.
 	 */
-	character: number;
+	column: number;
 
 	/**
-	 * Absolute position in input string.
+	 * 0-indexed offset in one-line string.
 	 */
-	position: number;
+	offset: number;
 }
 
 export interface Range {

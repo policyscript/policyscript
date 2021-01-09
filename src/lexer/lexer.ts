@@ -9,15 +9,15 @@ type Char = string | undefined;
 export class Lexer {
 	private readonly _input: string;
 	private _line: number;
-	private _character: number;
-	private _absolutePosition: number;
+	private _column: number;
+	private _offset: number;
 	private _ch: Char;
 
 	constructor(input: string) {
 		this._input = input;
-		this._line = 0;
-		this._character = 0;
-		this._absolutePosition = 0;
+		this._line = 1; // Line is 1-indexed.
+		this._column = 0;
+		this._offset = 0;
 		this._ch = input[0];
 	}
 
@@ -96,13 +96,13 @@ export class Lexer {
 
 	private readComment(): Token {
 		const start = this.getPositions();
-		const literalSegments: string[] = [];
+		let literal = '';
 
 		while (true) {
 			// Consume `#`.
 			this.advance();
 
-			const segmentPosition = this._absolutePosition;
+			const segmentPosition = this._offset;
 
 			// Advance until new line.
 			while (!this.isAtEnd() && this._ch !== '\n') {
@@ -110,8 +110,7 @@ export class Lexer {
 			}
 
 			const end = this.getPositions();
-			literalSegments.push(this._input.slice(segmentPosition, end.position).trim());
-			const literal = literalSegments.join(' ');
+			literal += this._input.slice(segmentPosition, end.offset);
 			const range: Range = {start, end};
 
 			// If end of file, return title token.
@@ -119,19 +118,21 @@ export class Lexer {
 				return {type: TokenType.COMMENT, literal, range};
 			}
 
-			// Consume `\n`, skip through whitespace.
+			// Consume `\n`.
 			this.advance();
-			this.skipWhitespace();
 
 			// If end of file, return title token.
 			if (this.isAtEnd()) {
 				return {type: TokenType.COMMENT, literal, range};
 			}
 
-			// If char is not `#`, this is the end of the comment
+			// If char is not `#`, this is the end of the comment.
 			if (this._ch !== '#') {
 				return {type: TokenType.COMMENT, literal, range};
 			}
+
+			// Otherwise, add in the line break we skipped.
+			literal += '\n';
 		}
 	}
 
@@ -147,39 +148,46 @@ export class Lexer {
 		this.skipWhitespace();
 
 		const start = this.getPositions();
-		const literalSegments: string[] = [];
+		let literal = '';
+		let end = this.getPositions();
+		let range: Range = {start, end};
 
 		while (true) {
-			const segmentPosition = this._absolutePosition;
+			const segmentPosition = this._offset;
+
+			let whitespaceOnlyLine = true;
 
 			// Advance until new line.
 			while (!this.isAtEnd() && this._ch !== '\n') {
+				if (!whitespaceChars.includes(this._ch as string)) {
+					whitespaceOnlyLine = false;
+				}
 				this.advance();
 			}
 
-			const end = this.getPositions();
-			literalSegments.push(this._input.slice(segmentPosition, end.position).trim());
-			const literal = literalSegments.join(' ');
-			const range: Range = {start, end};
+			// Update position if non whitespace only line.
+			// Otherwise we use positions from previous end line.
+			if (!whitespaceOnlyLine) {
+				end = this.getPositions();
+
+				// Prefix with line break if literal is empty
+				// string, since it is a new iteration.
+				const prefix = literal ? '\n' : '';
+				literal += prefix + this._input.slice(segmentPosition, end.offset);
+				range = {start, end};
+			}
 
 			// If end of file, return title token.
 			if (this.isAtEnd()) {
 				return {type, literal, range};
 			}
 
-			// Consume `\n`, skip through whitespace.
+			// Consume `\n`.
 			this.advance();
-			this.skipWhitespace();
 
-			// If end of file, return title token.
-			if (this.isAtEnd()) {
-				return {type, literal, range};
-			}
-
-			// If char is `\n`, this is a double line break and we
-			// end the title.
-			if (this._ch === '\n') {
-				this.advance();
+			// Return since we had a whitespace only line aka a
+			// double line break.
+			if (whitespaceOnlyLine) {
 				return {type, literal, range};
 			}
 		}
@@ -200,35 +208,35 @@ export class Lexer {
 	private advance(): void {
 		if (this._ch === '\n') {
 			this._line++;
-			this._character = -1;
+			this._column = -1;
 		}
 
-		if (this._absolutePosition + 1 >= this._input.length) {
+		if (this._offset + 1 >= this._input.length) {
 			this._ch = undefined;
 		} else {
-			this._ch = this._input[this._absolutePosition + 1];
+			this._ch = this._input[this._offset + 1];
 		}
 
-		this._absolutePosition++;
-		this._character++;
+		this._offset++;
+		this._column++;
 	}
 
 	private peek(): Char {
-		if (this._absolutePosition + 1 >= this._input.length) {
+		if (this._offset + 1 >= this._input.length) {
 			return undefined;
 		}
-		return this._input[this._absolutePosition + 1];
+		return this._input[this._offset + 1];
 	}
 
 	private isAtEnd(): boolean {
-		return this._absolutePosition >= this._input.length;
+		return this._offset >= this._input.length;
 	}
 
 	private getPositions(): Position {
 		return {
 			line: this._line,
-			character: this._character,
-			position: this._absolutePosition,
+			column: this._column,
+			offset: this._offset,
 		};
 	}
 
