@@ -11,6 +11,9 @@ describe('lexer', () => {
 		[`A\n`, `A`],
 		[`A\n\n`, `A`],
 		[`A\nB`, `A\nB`],
+		[`A\n# B`, `A`],
+		[`A\n # B`, `A`],
+		[`A\n\t# B`, `A`],
 		[`A\nB\n`, `A\nB`],
 		[`A\nB\n\n`, `A\nB`],
 		[`A\nB\n\nC`, `A\nB`],
@@ -25,7 +28,6 @@ describe('lexer', () => {
 			type: TokenType.HEADING,
 			literal: expected,
 		};
-		console.log(tokens[0]);
 		expect(tokens[0]).toMatchObject(testToken);
 	});
 
@@ -34,6 +36,9 @@ describe('lexer', () => {
 		[`\n- A\n`, `- A`],
 		[`\n- A\n\n`, `- A`],
 		[`\n- A\nB`, `- A\nB`],
+		[`\n- A\n# B`, `- A`],
+		[`\n- A\n # B`, `- A`],
+		[`\n- A\n\t# B`, `- A`],
 		[`\n- A\nB\n`, `- A\nB`],
 		[`\n- A\nB\n\n`, `- A\nB`],
 		[`\n- A\nB\n\nC`, `- A\nB`],
@@ -58,6 +63,9 @@ describe('lexer', () => {
 		[`\nA\n`, `A`],
 		[`\nA\n\n`, `A`],
 		[`\nA\nB`, `A\nB`],
+		[`\nA\n# B`, `A`],
+		[`\nA\n # B`, `A`],
+		[`\nA\n\t# B`, `A`],
 		[`\nA\nB\n`, `A\nB`],
 		[`\nA\nB\n\n`, `A\nB`],
 		[`\nA\nB\n\nC`, `A\nB`],
@@ -83,6 +91,9 @@ describe('lexer', () => {
 		[`\n# A\nC`, ` A`],
 		[`\n# A\n# B`, ` A\n B`],
 		[`\n# A\n# B\n`, ` A\n B`],
+		[`\n# A\n # B\n`, ` A\n B`],
+		[`\n # A\n # B\n`, ` A\n B`],
+		[`\n\t# A\n\t# B\n`, ` A\n B`],
 		[`\n# A\n# B\n\n`, ` A\n B`],
 		[`\n# A\n# B\n\n# C`, ` A\n B`],
 		[`\n# A\n# \tB`, ` A\n \tB`],

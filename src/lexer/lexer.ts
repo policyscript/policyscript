@@ -1,17 +1,15 @@
 import {Position, Range} from '../shared';
 import {Token, TokenType} from '../token';
 
-const whitespaceChars = [' ', '\t', '\r'];
-const whitespaceAndBreak = [...whitespaceChars, '\n'];
-
-type Char = string | undefined;
+const whitespaceChars: (undefined | string)[] = [' ', '\t', '\r'];
+const whitespaceAndBreak: (undefined | string)[] = [...whitespaceChars, '\n'];
 
 export class Lexer {
 	private readonly _input: string;
 	private _line: number;
 	private _column: number;
 	private _offset: number;
-	private _ch: Char;
+	private _ch: string | undefined;
 
 	constructor(input: string) {
 		this._input = input;
@@ -113,7 +111,7 @@ export class Lexer {
 			literal += this._input.slice(segmentPosition, end.offset);
 			const range: Range = {start, end};
 
-			// If end of file, return title token.
+			// If end of file, return token.
 			if (this.isAtEnd()) {
 				return {type: TokenType.COMMENT, literal, range};
 			}
@@ -121,9 +119,14 @@ export class Lexer {
 			// Consume `\n`.
 			this.advance();
 
-			// If end of file, return title token.
+			// If end of file, return token.
 			if (this.isAtEnd()) {
 				return {type: TokenType.COMMENT, literal, range};
+			}
+
+			// Advance until non-whitespace.
+			while (!this.isAtEnd() && whitespaceChars.includes(this._ch)) {
+				this.advance();
 			}
 
 			// If char is not `#`, this is the end of the comment.
@@ -144,22 +147,44 @@ export class Lexer {
 		return this.readUntilDoubleLineBreak(TokenType.PARAGRAPH);
 	}
 
-	private readUntilDoubleLineBreak(type: TokenType): Token {
+	/**
+	 * Will collect literal until it hits a double line break, comment or
+	 * EOF.
+	 * @param type The token type to create.
+	 * @param prevStart Provide this if there is a previous start point to
+	 * collect from, otherwise will start at current position.
+	 */
+	private readUntilDoubleLineBreak(type: TokenType, prevStart?: Position): Token {
 		this.skipWhitespace();
 
-		const start = this.getPositions();
+		let start = this.getPositions();
 		let literal = '';
+
+		// If previous start is defined, get literal until current
+		// position, then set start to previous start.
+		if (prevStart) {
+			literal += this._input.slice(prevStart.offset, start.offset);
+			start = prevStart;
+		}
+
 		let end = this.getPositions();
 		let range: Range = {start, end};
 
 		while (true) {
-			const segmentPosition = this._offset;
+			const previousOffset = this._offset;
 
 			let whitespaceOnlyLine = true;
 
 			// Advance until new line.
 			while (!this.isAtEnd() && this._ch !== '\n') {
-				if (!whitespaceChars.includes(this._ch as string)) {
+				// Return early if only whitespace chars and
+				// a comment char appears.
+				if (whitespaceOnlyLine && this._ch === '#') {
+					return {type, literal, range};
+				}
+
+				// If char is non-whitespace, set bool to false.
+				if (!whitespaceChars.includes(this._ch)) {
 					whitespaceOnlyLine = false;
 				}
 				this.advance();
@@ -173,11 +198,11 @@ export class Lexer {
 				// Prefix with line break if literal is empty
 				// string, since it is a new iteration.
 				const prefix = literal ? '\n' : '';
-				literal += prefix + this._input.slice(segmentPosition, end.offset);
+				literal += prefix + this._input.slice(previousOffset, end.offset);
 				range = {start, end};
 			}
 
-			// If end of file, return title token.
+			// If end of file, return token.
 			if (this.isAtEnd()) {
 				return {type, literal, range};
 			}
@@ -221,7 +246,7 @@ export class Lexer {
 		this._column++;
 	}
 
-	private peek(): Char {
+	private peek(): string | undefined {
 		if (this._offset + 1 >= this._input.length) {
 			return undefined;
 		}

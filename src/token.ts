@@ -63,6 +63,11 @@ export enum TokenType {
 	OUTPUTS = '@outputs',
 	LOCALS = '@locals',
 	CODE = '@code',
+
+	// Controls.
+	SCOPE_START = 'start',
+	SCOPE_END = 'end',
+	LINE_END = ';',
 }
 
 export const keywordToTokenType = {
