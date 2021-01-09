@@ -24,8 +24,8 @@ export class Lexer {
 	scan(): Token[] {
 		const tokens: Token[] = [];
 
-		// Read the top title.
-		tokens.push(this.readTitle());
+		// Read the top heading.
+		tokens.push(this.readHeading());
 
 		// Continue parsing tokens until we reach the end of the file.
 		while (!this.isAtEnd()) {
@@ -45,7 +45,7 @@ export class Lexer {
 		switch (this._ch) {
 			case '-':
 				if (this.peek() === ' ') {
-					return this.readTitle();
+					return this.readHeading();
 				} else {
 					return this.readParagraph();
 				}
@@ -136,8 +136,8 @@ export class Lexer {
 		}
 	}
 
-	private readTitle(): Token {
-		return this.readUntilDoubleLineBreak(TokenType.TITLE);
+	private readHeading(): Token {
+		return this.readUntilDoubleLineBreak(TokenType.HEADING);
 	}
 
 	private readParagraph(): Token {

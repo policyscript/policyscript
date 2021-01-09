@@ -9,7 +9,6 @@ export interface Token {
 export enum TokenType {
 	ILLEGAL = 'ILLEGAL',
 	EOF = 'EOF',
-	NEWLINE = 'NEWLINE',
 	COMMENT = 'COMMENT',
 
 	// Identifiers
@@ -25,8 +24,8 @@ export enum TokenType {
 	TIME = 'time',
 
 	// Documentation literals.
-	TITLE = 'TITLE',
-	PARAGRAPH = 'PARAGRAPH',
+	HEADING = 'heading',
+	PARAGRAPH = 'paragraph',
 
 	// Operators.
 	EQ = '=',
