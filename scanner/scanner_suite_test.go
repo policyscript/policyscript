@@ -1,4 +1,4 @@
-package lexer_test
+package scanner_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestLexer(t *testing.T) {
+func TestScanner(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Lexer Suite")
+	RunSpecs(t, "Scanner Suite")
 }
