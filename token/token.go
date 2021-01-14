@@ -17,7 +17,7 @@ type (
 		Literal string
 
 		// Range is the positional range of the token within the source.
-		Range util.Range
+		Range *util.Range
 	}
 )
 
@@ -36,6 +36,7 @@ const (
 	DECIMAL Type = "decimal"
 	MONEY   Type = "money"
 	PERIOD  Type = "period"
+	PERCENT Type = "percent"
 	TEXT    Type = "text"
 	DATE    Type = "date"
 	TIME    Type = "time"
@@ -67,14 +68,16 @@ const (
 	COLON  Type = ":"
 
 	// Keywords.
-
-	TRUE  Type = "true"
-	FALSE Type = "false"
 	IF    Type = "if"
 	FOR   Type = "for"
 	IN    Type = "in"
 	SET   Type = "set"
 	TO    Type = "to"
+	TRUE  Type = "true"
+	FALSE Type = "false"
+	AND   Type = "and"
+	OR    Type = "or"
+	LIST  Type = "list"
 
 	// Block keywords.
 
@@ -92,3 +95,68 @@ const (
 	SCOPE_END   Type = "end"
 	LINE_END    Type = ";"
 )
+
+var blockKeywords = map[string]Type{
+	"@meta":    META,
+	"@define":  DEFINE,
+	"@enum":    ENUM,
+	"@inputs":  INPUTS,
+	"@outputs": OUTPUTS,
+	"@locals":  LOCALS,
+	"@code":    CODE,
+}
+
+// LookupBlockKeyword will return the block keyword and true, or ILLEGAL and
+// false if not found.
+func LookupBlockKeyword(input []rune) (Type, bool) {
+	if kw, ok := blockKeywords[string(input)]; ok {
+		return kw, true
+	}
+	return ILLEGAL, false
+}
+
+// Valid periods
+var validPeriods = map[string]bool{
+	"year":    true,
+	"years":   true,
+	"month":   true,
+	"months":  true,
+	"day":     true,
+	"days":    true,
+	"hour":    true,
+	"hours":   true,
+	"minute":  true,
+	"minutes": true,
+	"second":  true,
+	"seconds": true,
+}
+
+// LookupPeriodKeyword will return true if a period keyword is valid.
+func LookupPeriodKeyword(input []rune) bool {
+	if _, ok := validPeriods[string(input)]; ok {
+		return true
+	}
+	return false
+}
+
+var keywords = map[string]Type{
+	"if":    IF,
+	"for":   FOR,
+	"in":    IN,
+	"set":   SET,
+	"to":    TO,
+	"true":  TRUE,
+	"false": FALSE,
+	"and":   AND,
+	"or":    OR,
+	"list":  LIST,
+}
+
+// LookupIdent will return the keyword, or IDENT which is any other alpha-
+// numeric string.
+func LookupIdent(input []rune) Type {
+	if kw, ok := keywords[string(input)]; ok {
+		return kw
+	}
+	return IDENT
+}

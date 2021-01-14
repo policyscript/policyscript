@@ -10,11 +10,17 @@ import (
 
 // Scanner lexes tokens from an input string.
 type Scanner struct {
-	input  []rune
+	input []rune
+
+	// Position
 	ch     rune
 	line   int
 	column int
 	offset int
+
+	// Block
+	blockInit bool
+	block     bool
 }
 
 // New initializes a new Scanner.
@@ -31,80 +37,260 @@ func New(input []byte) *Scanner {
 }
 
 // Scan the input into a list of tokens.
-func (l *Scanner) Scan() []*token.Token {
+func (s *Scanner) Scan() []*token.Token {
 	var tokens []*token.Token
 
-	for !l.isAtEnd() {
-		tokens = append(tokens, l.nextToken())
+	for !s.isAtEnd() {
+		tokens = append(tokens, s.nextToken())
 	}
 
 	// EOF token.
-	tokens = append(tokens, l.nextToken())
+	tokens = append(tokens, s.nextToken())
 
 	return tokens
 }
 
-func (l *Scanner) nextToken() *token.Token {
-	start := l.skipWhitespaceAndBreaks()
+func (s *Scanner) nextToken() *token.Token {
+	line := s.line
+	start := s.skipWhitespaceAndBreaks()
 
-	switch l.ch {
+	if s.blockInit {
+		// Only continue block init if it's on the same line.
+		if s.line == line {
+			switch {
+			case s.ch == '{':
+				// Begin block.
+				s.blockInit = false
+				s.block = true
+
+				return s.makeSingleRuneToken(token.LBRACE)
+			case isAlphaNumeric(s.ch):
+				// Get type def identifier.
+				start = s.getPosition()
+				s.next()
+				for isAlphaNumeric(s.ch) {
+					s.next()
+				}
+				return s.makeMultiRuneToken(token.IDENT, start)
+			}
+		}
+
+		// Otherwise, stop block init.
+		s.blockInit = false
+	}
+
+	if s.block {
+		return s.nextBlockToken()
+	}
+
+	switch s.ch {
 	case '_':
 		// Only a heading if it is in the first column and followed by a
 		// space character.
-		if l.column == 0 && l.peek() == ' ' {
-			return l.readHeading()
+		if s.column == 0 && s.peek() == ' ' {
+			return s.readHeading()
 		}
-		return l.readParagraph(start)
+	case '@':
+		// Only a block if in first column.
+		if s.column == 0 {
+			if token := s.eatBlockKeyword(start); token != nil {
+				return token
+			}
+		}
 	case '#':
-		return l.readComment()
+		return s.readComment()
 	case 0:
-		position := l.getPosition()
+		position := s.getPosition()
 		return makeToken(token.EOF, nil, position, position)
+	}
+
+	return s.readParagraph(start)
+}
+
+func (s *Scanner) nextBlockToken() *token.Token {
+	start := s.getPosition()
+
+	switch s.ch {
+	case '}':
+		// End block.
+		s.block = false
+		return s.makeSingleRuneToken(token.RBRACE)
+	// case '`': // string
+	case '$':
+		s.next()
+		if isNumeric(s.ch) {
+			// TODO: parse to 2 decimal places.
+		}
+		return s.makeMultiRuneToken(token.ILLEGAL, start)
+	case '|':
+		s.next()
+		if isNumeric(s.ch) {
+			// TODO: parse time or date.
+		}
+		return s.makeMultiRuneToken(token.ILLEGAL, start)
+	case '(':
+		return s.makeSingleRuneToken(token.LPAREN)
+	case ')':
+		return s.makeSingleRuneToken(token.RPAREN)
+	case ':':
+		return s.makeSingleRuneToken(token.COLON)
+	case '=':
+		return s.makeSingleRuneToken(token.EQ)
+	case '!':
+		s.next()
+		if s.ch == '=' {
+			s.next()
+			return s.makeMultiRuneToken(token.NOT_EQ, start)
+		}
+		return s.makeMultiRuneToken(token.ILLEGAL, start)
+	case '+':
+		return s.makeSingleRuneToken(token.PLUS)
+	case '-':
+		return s.makeSingleRuneToken(token.MINUS)
+	case '*':
+		return s.makeSingleRuneToken(token.MULT)
+	case '/':
+		return s.makeSingleRuneToken(token.DIV)
+	case '#':
+		return s.readComment()
+	case '<':
+		s.next()
+		if s.ch == '=' {
+			s.next()
+			return s.makeMultiRuneToken(token.LT_EQ, start)
+		}
+		return s.makeMultiRuneToken(token.LT, start)
+	case '>':
+		s.next()
+		if s.ch == '=' {
+			s.next()
+			return s.makeMultiRuneToken(token.GT_EQ, start)
+		}
+		return s.makeMultiRuneToken(token.GT, start)
 	default:
-		return l.readParagraph(start)
+		switch {
+		case isAlpha(s.ch):
+			return s.readIdentifier()
+		case isNumeric(s.ch):
+			return s.readIdentifier()
+		default:
+			return s.makeSingleRuneToken(token.ILLEGAL)
+		}
 	}
 }
 
-func (l *Scanner) readHeading() *token.Token {
-	return l.readUntilDoubleLineBreak(token.HEADING, nil)
-}
-
-func (l *Scanner) readParagraph(start *util.Position) *token.Token {
-	return l.readUntilDoubleLineBreak(token.PARAGRAPH, start)
-}
-
-func (l *Scanner) readComment() *token.Token {
+func (s *Scanner) readIdentifier() *token.Token {
+	start := s.getPosition()
+	for isAlphaNumeric(s.ch) {
+		s.next()
+	}
 	var (
-		start   *util.Position = l.getPosition()
+		end       = s.getPosition()
+		literal   = s.input[start.Offset:end.Offset]
+		tokenType = token.LookupIdent(literal)
+	)
+	return makeToken(tokenType, literal, start, end)
+}
+
+func (s *Scanner) readNumber(tokenType *token.Type) *token.Token {
+	var (
+		start = s.getPosition()
+		t     = token.INTEGER
+	)
+	for isNumeric(s.ch) {
+		s.next()
+	}
+	if s.ch == '.' && isNumeric(s.peek()) {
+		t = token.DECIMAL
+		s.next()
+		for isNumeric(s.ch) {
+			s.next()
+		}
+	}
+	if tokenType == nil {
+		if s.ch == '%' {
+			t = token.PERCENT
+			s.next()
+		} else if ok := s.checkPeriod(); ok {
+			t = token.PERIOD
+		}
+	} else {
+		t = *tokenType
+	}
+	return s.makeMultiRuneToken(t, start)
+}
+
+// This will return false and reset position if no match.
+func (s *Scanner) checkPeriod() bool {
+	// Memoize values.
+	var (
+		ch     = s.ch
+		line   = s.line
+		column = s.column
+		offset = s.offset
+	)
+
+	s.skipWhitespace()
+
+	if !isAlpha(s.ch) {
+		s.resetPosition(ch, line, column, offset)
+		return false
+	}
+
+	start := s.offset
+	for isAlpha(s.ch) {
+		s.next()
+	}
+	end := s.offset
+
+	literal := s.input[start:end]
+	if ok := token.LookupPeriodKeyword(literal); ok {
+		return true
+	}
+	s.resetPosition(ch, line, column, offset)
+	return false
+}
+
+func (s *Scanner) readHeading() *token.Token {
+	return s.readUntilDoubleLineBreak(token.HEADING, nil)
+}
+
+func (s *Scanner) readParagraph(start *util.Position) *token.Token {
+	return s.readUntilDoubleLineBreak(token.PARAGRAPH, start)
+}
+
+func (s *Scanner) readComment() *token.Token {
+	var (
+		start   *util.Position = s.getPosition()
 		end     *util.Position = start
 		literal []rune         = nil
 	)
 
 	for {
 		// Consume the leading '#'.
-		l.next()
+		s.next()
 
-		startOffset := l.offset
+		startOffset := s.offset
 
 		// Advance until new line.
-		for !l.isAtEnd() && l.ch != '\n' {
-			l.next()
+		for !s.isAtEnd() && s.ch != '\n' {
+			s.next()
 		}
 
-		end = l.getPosition()
-		literal = append(literal, l.input[startOffset:end.Offset]...)
+		end = s.getPosition()
+		literal = append(literal, s.input[startOffset:end.Offset]...)
 
 		// If not at end, advance to consume '\n'.
-		if !l.isAtEnd() {
-			l.next()
+		if !s.isAtEnd() {
+			s.next()
 		}
 
 		// If at end, return token.
-		if l.isAtEnd() {
+		if s.isAtEnd() {
 			return makeToken(token.COMMENT, literal, start, end)
 		}
 
-		nextLineIsComment := l.consumeWhitespaceTillChar('#')
+		nextLineIsComment := s.consumeWhitespaceTillChar('#')
 		if !nextLineIsComment {
 			return makeToken(token.COMMENT, literal, start, end)
 		}
@@ -116,9 +302,9 @@ func (l *Scanner) readComment() *token.Token {
 
 // readUntilDoubleLineBreak will read a token until it hits a double line break,
 // EOF or a comment.
-func (l *Scanner) readUntilDoubleLineBreak(tokenType token.Type, prevStart *util.Position) *token.Token {
+func (s *Scanner) readUntilDoubleLineBreak(tokenType token.Type, prevStart *util.Position) *token.Token {
 	var (
-		start   *util.Position = l.getPosition()
+		start   *util.Position = s.getPosition()
 		end     *util.Position = start
 		literal []rune         = nil
 	)
@@ -136,24 +322,24 @@ func (l *Scanner) readUntilDoubleLineBreak(tokenType token.Type, prevStart *util
 		whitespaceOnly = true
 
 		// Advance until new line.
-		for !l.isAtEnd() && l.ch != '\n' {
+		for !s.isAtEnd() && s.ch != '\n' {
 			// Set whitespace only to false if line contains a non-
 			// whitespace character.
-			if !isWhitespace(l.ch) {
+			if !isWhitespace(s.ch) {
 				// Return early if new line begins with a comment.
-				if whitespaceOnly && l.ch == '#' {
+				if whitespaceOnly && s.ch == '#' {
 					return makeToken(tokenType, literal, start, end)
 				}
 
 				whitespaceOnly = false
 			}
 
-			l.next()
+			s.next()
 		}
 
 		// Update position if non-whitespace only line.
 		if !whitespaceOnly {
-			end = l.getPosition()
+			end = s.getPosition()
 
 			// If literal is not nil (has been through a cycle),
 			// append the line break.
@@ -163,112 +349,149 @@ func (l *Scanner) readUntilDoubleLineBreak(tokenType token.Type, prevStart *util
 				literal = []rune{}
 			}
 
-			literal = append(literal, l.input[startOffset:end.Offset]...)
+			literal = append(literal, s.input[startOffset:end.Offset]...)
 		}
 
 		// If at end, return token. If line was whitespace only, return
 		// since it is a "double line break".
-		if l.isAtEnd() || whitespaceOnly {
-			if !l.isAtEnd() {
-				l.next()
+		if s.isAtEnd() || whitespaceOnly {
+			if !s.isAtEnd() {
+				s.next()
 			}
 
 			return makeToken(tokenType, literal, start, end)
 		}
 
-		l.next()
-		startOffset = l.offset
+		s.next()
+		startOffset = s.offset
 	}
 }
 
 // This will return false and reset position if no match. It does not consume
 // the character.
-func (l *Scanner) consumeWhitespaceTillChar(char rune) bool {
+func (s *Scanner) consumeWhitespaceTillChar(char rune) bool {
 	// Memoize values.
 	var (
-		ch     = l.ch
-		line   = l.line
-		column = l.column
-		offset = l.offset
+		ch     = s.ch
+		line   = s.line
+		column = s.column
+		offset = s.offset
 	)
 
-	l.skipWhitespace()
+	s.skipWhitespace()
 
-	if l.ch == char {
+	if s.ch == char {
 		return true
 	}
 
 	// Else, reset position and return false.
-	l.ch = ch
-	l.line = line
-	l.column = column
-	l.offset = offset
+	s.resetPosition(ch, line, column, offset)
 	return false
+}
+
+func (s *Scanner) resetPosition(ch rune, line int, column int, offset int) {
+	s.ch = ch
+	s.line = line
+	s.column = column
+	s.offset = offset
 }
 
 // This will skip through empty lines, but will return the position at the start
 // of the first non-empty line.
-func (l *Scanner) skipWhitespaceAndBreaks() *util.Position {
+func (s *Scanner) skipWhitespaceAndBreaks() *util.Position {
 	position := &util.Position{
-		Line:   l.line,
-		Column: l.column,
-		Offset: l.offset,
+		Line:   s.line,
+		Column: s.column,
+		Offset: s.offset,
 	}
 
 	for {
-		l.skipWhitespace()
+		s.skipWhitespace()
 
-		if l.ch == '\n' {
+		if s.ch == '\n' {
 			// If new line, consume then store current values.
-			l.next()
-			position.Line = l.line
-			position.Column = l.column
-			position.Offset = l.offset
+			s.next()
+			position.Line = s.line
+			position.Column = s.column
+			position.Offset = s.offset
 		} else {
 			return position
 		}
 	}
 }
 
-func (l *Scanner) skipWhitespace() {
-	for isWhitespace(l.ch) {
-		l.next()
+func (s *Scanner) skipWhitespace() {
+	for isWhitespace(s.ch) {
+		s.next()
 	}
 }
 
-func (l *Scanner) next() {
-	if l.ch == '\n' {
-		l.line++
-		l.column = -1
+func (s *Scanner) next() {
+	if s.ch == '\n' {
+		s.line++
+		s.column = -1
 	}
 
-	if l.offset+1 >= len(l.input) {
-		l.ch = 0
+	if s.offset+1 >= len(s.input) {
+		s.ch = 0
 	} else {
-		l.ch = l.input[l.offset+1]
+		s.ch = s.input[s.offset+1]
 	}
 
-	l.offset++
-	l.column++
+	s.offset++
+	s.column++
 }
 
-func (l *Scanner) peek() rune {
-	if l.offset+1 >= len(l.input) {
+func (s *Scanner) eatBlockKeyword(start *util.Position) *token.Token {
+	// Eat '@'.
+	s.next()
+
+	for isAlpha(s.ch) {
+		s.next()
+	}
+
+	keyword := s.input[start.Offset:s.offset]
+
+	tokenType, ok := token.LookupBlockKeyword(keyword)
+	if !ok {
+		return nil
+	}
+
+	// If block keyword, set pending to true.
+	s.blockInit = true
+	return makeToken(tokenType, keyword, start, s.getPosition())
+}
+
+func (s *Scanner) peek() rune {
+	if s.offset+1 >= len(s.input) {
 		return 0
 	}
-	return l.input[l.offset+1]
+	return s.input[s.offset+1]
 }
 
-func (l *Scanner) isAtEnd() bool {
-	return l.offset >= len(l.input)
+func (s *Scanner) isAtEnd() bool {
+	return s.offset >= len(s.input)
 }
 
-func (l *Scanner) getPosition() *util.Position {
+func (s *Scanner) getPosition() *util.Position {
 	return &util.Position{
-		Line:   l.line,
-		Column: l.column,
-		Offset: l.offset,
+		Line:   s.line,
+		Column: s.column,
+		Offset: s.offset,
 	}
+}
+
+func (s *Scanner) makeSingleRuneToken(tokenType token.Type) *token.Token {
+	start := s.getPosition()
+	s.next()
+	end := s.getPosition()
+	return makeToken(tokenType, s.input[start.Offset:end.Offset], start, end)
+}
+
+func (s *Scanner) makeMultiRuneToken(tokenType token.Type, start *util.Position) *token.Token {
+	end := s.getPosition()
+	literal := s.input[start.Offset:end.Offset]
+	return makeToken(tokenType, literal, start, end)
 }
 
 func isWhitespace(char rune) bool {
@@ -279,9 +502,21 @@ func makeToken(tokenType token.Type, literal []rune, start, end *util.Position) 
 	return &token.Token{
 		Type:    tokenType,
 		Literal: string(literal),
-		Range: util.Range{
+		Range: &util.Range{
 			Start: start,
 			End:   end,
 		},
 	}
+}
+
+func isAlpha(ch rune) bool {
+	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_'
+}
+
+func isNumeric(ch rune) bool {
+	return '0' <= ch && ch <= '9'
+}
+
+func isAlphaNumeric(ch rune) bool {
+	return isAlpha(ch) || isNumeric(ch)
 }
