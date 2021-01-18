@@ -29,7 +29,7 @@ var _ = Describe("Scanner", func() {
 		{"\n_ A", "_ A"},
 		{"\n_ _A", "_ _A"},
 	}, func(input, expects string) {
-		l := scanner.New([]byte(input))
+		l := scanner.New([]byte(input), nil)
 		tokens := l.Scan()
 		t := tokens[0]
 
@@ -52,7 +52,7 @@ var _ = Describe("Scanner", func() {
 		{"\nA\n\tB", "A\n\tB"},
 		{"\nA\n  B", "A\n  B"},
 	}, func(input, expects string) {
-		l := scanner.New([]byte(input))
+		l := scanner.New([]byte(input), nil)
 		tokens := l.Scan()
 		t := tokens[0]
 
@@ -77,7 +77,7 @@ var _ = Describe("Scanner", func() {
 		{"\n # A\n # B\n", " A\n B"},
 		{"\n\t# A\n\t# B\n", " A\n B"},
 	}, func(input, expects string) {
-		l := scanner.New([]byte(input))
+		l := scanner.New([]byte(input), nil)
 		tokens := l.Scan()
 		t := tokens[0]
 
@@ -86,40 +86,40 @@ var _ = Describe("Scanner", func() {
 	})
 
 	eachTokens("can scan program", []inputAndTokens{
-		{input: "_ Heading", expects: []*token.Token{
-			{Type: token.HEADING, Literal: "_ Heading", Range: util.Range{
+		{input: "_ Heading", expects: []token.Token{
+			{Type: token.HEADING, Literal: "_ Heading", Range: &util.Range{
 				Start: &util.Position{Line: 1, Column: 0, Offset: 0},
 				End:   &util.Position{Line: 1, Column: 9, Offset: 9},
 			}},
-			{Type: token.EOF, Literal: "", Range: util.Range{
+			{Type: token.EOF, Literal: "", Range: &util.Range{
 				Start: &util.Position{Line: 1, Column: 9, Offset: 9},
 				End:   &util.Position{Line: 1, Column: 9, Offset: 9},
 			}},
 		}},
-		{input: "_ Heading\n # Comment", expects: []*token.Token{
-			{Type: token.HEADING, Literal: "_ Heading", Range: util.Range{
+		{input: "_ Heading\n # Comment", expects: []token.Token{
+			{Type: token.HEADING, Literal: "_ Heading", Range: &util.Range{
 				Start: &util.Position{Line: 1, Column: 0, Offset: 0},
 				End:   &util.Position{Line: 1, Column: 9, Offset: 9},
 			}},
-			{Type: token.COMMENT, Literal: " Comment", Range: util.Range{
+			{Type: token.COMMENT, Literal: " Comment", Range: &util.Range{
 				Start: &util.Position{Line: 2, Column: 1, Offset: 11},
 				End:   &util.Position{Line: 2, Column: 10, Offset: 20},
 			}},
-			{Type: token.EOF, Literal: "", Range: util.Range{
+			{Type: token.EOF, Literal: "", Range: &util.Range{
 				Start: &util.Position{Line: 2, Column: 10, Offset: 20},
 				End:   &util.Position{Line: 2, Column: 10, Offset: 20},
 			}},
 		}},
-		{input: "_ Heading\n\n  Paragraph\n continued", expects: []*token.Token{
-			{Type: token.HEADING, Literal: "_ Heading", Range: util.Range{
+		{input: "_ Heading\n\n  Paragraph\n continued", expects: []token.Token{
+			{Type: token.HEADING, Literal: "_ Heading", Range: &util.Range{
 				Start: &util.Position{Line: 1, Column: 0, Offset: 0},
 				End:   &util.Position{Line: 1, Column: 9, Offset: 9},
 			}},
-			{Type: token.PARAGRAPH, Literal: "  Paragraph\n continued", Range: util.Range{
+			{Type: token.PARAGRAPH, Literal: "  Paragraph\n continued", Range: &util.Range{
 				Start: &util.Position{Line: 3, Column: 0, Offset: 11},
 				End:   &util.Position{Line: 4, Column: 10, Offset: 33},
 			}},
-			{Type: token.EOF, Literal: "", Range: util.Range{
+			{Type: token.EOF, Literal: "", Range: &util.Range{
 				Start: &util.Position{Line: 4, Column: 10, Offset: 33},
 				End:   &util.Position{Line: 4, Column: 10, Offset: 33},
 			}},
@@ -129,7 +129,7 @@ var _ = Describe("Scanner", func() {
 
 type inputAndTokens struct {
 	input   string
-	expects []*token.Token
+	expects []token.Token
 }
 
 // Each runs every item in a list of inputs and expects.
@@ -142,13 +142,13 @@ func eachTokens(title string, items []inputAndTokens) {
 				title, i, input, expects)
 		)
 		ginkgo.It(text, func() {
-			l := scanner.New([]byte(input))
+			l := scanner.New([]byte(input), nil)
 			tokens := l.Scan()
 
 			Expect(len(tokens)).To(Equal(len(expects)), "number of tokens incorrect")
 
 			for i, t := range tokens {
-				Expect(*t).To(Equal(*expects[i]), fmt.Sprintf("token index %d mismatch", i))
+				Expect(t).To(Equal(expects[i]), fmt.Sprintf("token index %d mismatch", i))
 			}
 		})
 	}

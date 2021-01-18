@@ -1,6 +1,10 @@
 package token
 
-import "github.com/policyscript/policyscript/util"
+import (
+	"fmt"
+
+	"github.com/policyscript/policyscript/util"
+)
 
 type (
 
@@ -21,6 +25,15 @@ type (
 	}
 )
 
+func (t Token) String() string {
+	return fmt.Sprintf("%10s [%4d, %4d, %4d]  [%4d, %4d, %4d] %q",
+		t.Type,
+		t.Range.Start.Line, t.Range.Start.Column, t.Range.Start.Offset,
+		t.Range.End.Line, t.Range.End.Column, t.Range.End.Offset,
+		t.Literal,
+	)
+}
+
 const (
 	ILLEGAL Type = "illegal"
 	COMMENT Type = "comment"
@@ -32,12 +45,12 @@ const (
 
 	// Literals.
 
+	TEXT    Type = "text"
 	INTEGER Type = "integer"
 	DECIMAL Type = "decimal"
 	MONEY   Type = "money"
-	PERIOD  Type = "period"
 	PERCENT Type = "percent"
-	TEXT    Type = "text"
+	PERIOD  Type = "period"
 	DATE    Type = "date"
 	TIME    Type = "time"
 
@@ -91,9 +104,7 @@ const (
 
 	// Controls.
 
-	SCOPE_START Type = "start"
-	SCOPE_END   Type = "end"
-	LINE_END    Type = ";"
+	SEMI Type = ";"
 )
 
 var blockKeywords = map[string]Type{
@@ -154,9 +165,66 @@ var keywords = map[string]Type{
 
 // LookupIdent will return the keyword, or IDENT which is any other alpha-
 // numeric string.
-func LookupIdent(input []rune) Type {
+func LookupIdent(input []rune) (Type, bool) {
 	if kw, ok := keywords[string(input)]; ok {
-		return kw
+		return kw, true
 	}
-	return IDENT
+	return IDENT, false
+}
+
+// https://en.wikipedia.org/wiki/Currency_symbol
+var validMoney = map[rune]bool{
+	'؋': true,
+	'฿': true,
+	'₵': true,
+	'₡': true,
+	'¢': true,
+	'C': true,
+	'i': true,
+	'f': true,
+	'r': true,
+	'ã': true,
+	'o': true,
+	'$': true,
+	'₫': true,
+	'֏': true,
+	'€': true,
+	'ƒ': true,
+	'₣': true,
+	'₲': true,
+	'₴': true,
+	'₾': true,
+	'₭': true,
+	'₺': true,
+	'₼': true,
+	'₦': true,
+	'₱': true,
+	'£': true,
+	'元': true,
+	'圆': true,
+	'圓': true,
+	'﷼': true,
+	'៛': true,
+	'₽': true,
+	'₹': true,
+	'R': true,
+	'p': true,
+	// 'රු': true, // Can not be represented as single rune.
+	'૱': true,
+	'௹': true,
+	'꠸': true,
+	'₨': true,
+	'₪': true,
+	'৳': true,
+	'₸': true,
+	'₮': true,
+	'₩': true,
+	'¥': true,
+	'円': true,
+}
+
+// LookupMoney will return true if valid money symbol.
+func LookupMoney(input rune) bool {
+	_, ok := validMoney[input]
+	return ok
 }

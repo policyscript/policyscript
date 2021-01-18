@@ -11,6 +11,7 @@ import (
 // Scanner lexes tokens from an input string.
 type Scanner struct {
 	input []rune
+	err   ErrorHandler
 
 	// Position
 	ch     rune
@@ -21,15 +22,27 @@ type Scanner struct {
 	// Block
 	blockInit bool
 	block     bool
+	addSemi   bool
+
+	ErrorCount int
 }
 
+// An ErrorHandler is called with each error the scanner finds.
+type ErrorHandler func(msg string, pos util.Position)
+
 // New initializes a new Scanner.
-func New(input []byte) *Scanner {
+func New(input []byte, err ErrorHandler) *Scanner {
 	l := &Scanner{
-		input:  bytes.Runes(input),
+		input: bytes.Runes(input),
+		err:   err,
+
+		// ch will be obtained by calling `next`
 		line:   1,
 		column: -1,
 		offset: -1,
+
+		blockInit: false,
+		block:     false,
 	}
 
 	l.next()
@@ -37,20 +50,32 @@ func New(input []byte) *Scanner {
 }
 
 // Scan the input into a list of tokens.
-func (s *Scanner) Scan() []*token.Token {
-	var tokens []*token.Token
+func (s *Scanner) Scan() []token.Token {
+	var tokens []token.Token
 
 	for !s.isAtEnd() {
-		tokens = append(tokens, s.nextToken())
+		tokens = append(tokens, *s.nextToken())
 	}
 
 	// EOF token.
-	tokens = append(tokens, s.nextToken())
+	tokens = append(tokens, *s.nextToken())
 
 	return tokens
 }
 
+func (s *Scanner) error(msg string, pos *util.Position) {
+	if s.err != nil {
+		s.err(msg, *pos)
+	}
+	s.ErrorCount++
+}
+
 func (s *Scanner) nextToken() *token.Token {
+	// Special scanning for when we are inside a block.
+	if s.block {
+		return s.nextBlockToken()
+	}
+
 	line := s.line
 	start := s.skipWhitespaceAndBreaks()
 
@@ -79,10 +104,6 @@ func (s *Scanner) nextToken() *token.Token {
 		s.blockInit = false
 	}
 
-	if s.block {
-		return s.nextBlockToken()
-	}
-
 	switch s.ch {
 	case '_':
 		// Only a heading if it is in the first column and followed by a
@@ -108,29 +129,42 @@ func (s *Scanner) nextToken() *token.Token {
 }
 
 func (s *Scanner) nextBlockToken() *token.Token {
+	line := s.line
 	start := s.getPosition()
 
+	s.skipWhitespaceAndBreaks()
+
+	if s.addSemi && s.line != line && !s.isAtEnd() {
+		s.addSemi = false
+		return makeToken(token.SEMI, []rune{';'}, start, start)
+	}
+
+	s.addSemi = false
+
 	switch s.ch {
+	case 0:
+		// End block.
+		s.block = false
+		position := s.getPosition()
+		s.error("block does not have closing \"}\"", position)
+		return makeToken(token.EOF, nil, position, position)
 	case '}':
 		// End block.
 		s.block = false
 		return s.makeSingleRuneToken(token.RBRACE)
-	// case '`': // string
-	case '$':
-		s.next()
-		if isNumeric(s.ch) {
-			// TODO: parse to 2 decimal places.
-		}
-		return s.makeMultiRuneToken(token.ILLEGAL, start)
+	case '`':
+		s.addSemi = true
+		return s.readText()
 	case '|':
-		s.next()
-		if isNumeric(s.ch) {
-			// TODO: parse time or date.
+		s.addSemi = true
+		if isNumeric(s.peek()) {
+			return s.readTimeOrDate()
 		}
-		return s.makeMultiRuneToken(token.ILLEGAL, start)
+		return s.makeSingleRuneToken(token.ILLEGAL)
 	case '(':
 		return s.makeSingleRuneToken(token.LPAREN)
 	case ')':
+		s.addSemi = true
 		return s.makeSingleRuneToken(token.RPAREN)
 	case ':':
 		return s.makeSingleRuneToken(token.COLON)
@@ -169,14 +203,41 @@ func (s *Scanner) nextBlockToken() *token.Token {
 		return s.makeMultiRuneToken(token.GT, start)
 	default:
 		switch {
+		case token.LookupMoney(s.ch) && isNumeric(s.peek()):
+			s.addSemi = true
+			t := token.MONEY
+			return s.readNumber(&t)
 		case isAlpha(s.ch):
+			// Will add semi after identifier but not keyword.
 			return s.readIdentifier()
 		case isNumeric(s.ch):
-			return s.readIdentifier()
+			s.addSemi = true
+			return s.readNumber(nil)
 		default:
+			s.addSemi = true
 			return s.makeSingleRuneToken(token.ILLEGAL)
 		}
 	}
+}
+
+func (s *Scanner) readText() *token.Token {
+	start := s.getPosition()
+	s.next()
+	textStart := s.offset
+
+	for s.ch != '`' && !s.isAtEnd() {
+		s.next()
+	}
+
+	literal := s.input[textStart:s.offset]
+
+	if s.isAtEnd() {
+		s.error("text does not have closing \"`\"", start)
+	} else {
+		s.next()
+	}
+
+	return makeToken(token.TEXT, literal, start, s.getPosition())
 }
 
 func (s *Scanner) readIdentifier() *token.Token {
@@ -185,39 +246,96 @@ func (s *Scanner) readIdentifier() *token.Token {
 		s.next()
 	}
 	var (
-		end       = s.getPosition()
-		literal   = s.input[start.Offset:end.Offset]
-		tokenType = token.LookupIdent(literal)
+		end                  = s.getPosition()
+		literal              = s.input[start.Offset:end.Offset]
+		tokenType, isKeyword = token.LookupIdent(literal)
 	)
+	// Don't end line after a keyword.
+	if !isKeyword {
+		s.addSemi = true
+	}
 	return makeToken(tokenType, literal, start, end)
 }
 
 func (s *Scanner) readNumber(tokenType *token.Type) *token.Token {
-	var (
-		start = s.getPosition()
-		t     = token.INTEGER
-	)
-	for isNumeric(s.ch) {
+	t := token.INTEGER
+	start := s.getPosition()
+	isInteger := true
+
+	// Eat first char, already scanned.
+	s.next()
+
+	// Before decimal point can have arbitrary underscores.
+	for isNumericUnderscore(s.ch) {
 		s.next()
 	}
+
+	// If decimal point and next is numeric, parse up until numeric ends.
 	if s.ch == '.' && isNumeric(s.peek()) {
+		isInteger = false
 		t = token.DECIMAL
 		s.next()
 		for isNumeric(s.ch) {
 			s.next()
 		}
 	}
+
+	// If no provided token type, can optionally "search" for percentage or
+	// period.
 	if tokenType == nil {
 		if s.ch == '%' {
 			t = token.PERCENT
 			s.next()
-		} else if ok := s.checkPeriod(); ok {
+		} else if isInteger && s.checkPeriod() {
+			// Can only be period if integer value.
 			t = token.PERIOD
 		}
 	} else {
 		t = *tokenType
 	}
 	return s.makeMultiRuneToken(t, start)
+}
+
+func (s *Scanner) readTimeOrDate() *token.Token {
+	start := s.getPosition()
+
+	// Eat `|`.
+	s.next()
+
+	for isNumeric(s.ch) {
+		s.next()
+	}
+
+	if s.ch == ':' {
+		s.readTime(start)
+		return s.makeMultiRuneToken(token.TIME, start)
+	}
+
+	// Default to date even if `/` is not present.
+	s.readDate(start)
+	return s.makeMultiRuneToken(token.DATE, start)
+}
+
+func (s *Scanner) readDate(start *util.Position) {
+	for isNumeric(s.ch) || s.ch == '/' {
+		s.next()
+	}
+	if s.ch == '|' {
+		s.next()
+	} else {
+		s.error("invalid date", start)
+	}
+}
+
+func (s *Scanner) readTime(start *util.Position) {
+	for isNumeric(s.ch) || s.ch == ':' {
+		s.next()
+	}
+	if s.ch == '|' {
+		s.next()
+	} else {
+		s.error("invalid time", start)
+	}
 }
 
 // This will return false and reset position if no match.
@@ -515,6 +633,10 @@ func isAlpha(ch rune) bool {
 
 func isNumeric(ch rune) bool {
 	return '0' <= ch && ch <= '9'
+}
+
+func isNumericUnderscore(ch rune) bool {
+	return isNumeric(ch) || ch == '_'
 }
 
 func isAlphaNumeric(ch rune) bool {
