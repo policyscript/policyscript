@@ -620,10 +620,7 @@ func makeToken(tokenType token.Type, literal []rune, start, end *util.Position) 
 	return &token.Token{
 		Type:    tokenType,
 		Literal: string(literal),
-		Range: &util.Range{
-			Start: start,
-			End:   end,
-		},
+		Range:   util.Range{Start: *start, End: *end},
 	}
 }
 

@@ -19,9 +19,9 @@ type (
 	Range struct {
 
 		// Start is the beginning position.
-		Start *Position
+		Start Position
 
 		// End is the end position.
-		End *Position
+		End Position
 	}
 )

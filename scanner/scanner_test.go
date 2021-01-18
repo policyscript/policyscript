@@ -87,41 +87,41 @@ var _ = Describe("Scanner", func() {
 
 	eachTokens("can scan program", []inputAndTokens{
 		{input: "_ Heading", expects: []token.Token{
-			{Type: token.HEADING, Literal: "_ Heading", Range: &util.Range{
-				Start: &util.Position{Line: 1, Column: 0, Offset: 0},
-				End:   &util.Position{Line: 1, Column: 9, Offset: 9},
+			{Type: token.HEADING, Literal: "_ Heading", Range: util.Range{
+				Start: util.Position{Line: 1, Column: 0, Offset: 0},
+				End:   util.Position{Line: 1, Column: 9, Offset: 9},
 			}},
-			{Type: token.EOF, Literal: "", Range: &util.Range{
-				Start: &util.Position{Line: 1, Column: 9, Offset: 9},
-				End:   &util.Position{Line: 1, Column: 9, Offset: 9},
+			{Type: token.EOF, Literal: "", Range: util.Range{
+				Start: util.Position{Line: 1, Column: 9, Offset: 9},
+				End:   util.Position{Line: 1, Column: 9, Offset: 9},
 			}},
 		}},
 		{input: "_ Heading\n # Comment", expects: []token.Token{
-			{Type: token.HEADING, Literal: "_ Heading", Range: &util.Range{
-				Start: &util.Position{Line: 1, Column: 0, Offset: 0},
-				End:   &util.Position{Line: 1, Column: 9, Offset: 9},
+			{Type: token.HEADING, Literal: "_ Heading", Range: util.Range{
+				Start: util.Position{Line: 1, Column: 0, Offset: 0},
+				End:   util.Position{Line: 1, Column: 9, Offset: 9},
 			}},
-			{Type: token.COMMENT, Literal: " Comment", Range: &util.Range{
-				Start: &util.Position{Line: 2, Column: 1, Offset: 11},
-				End:   &util.Position{Line: 2, Column: 10, Offset: 20},
+			{Type: token.COMMENT, Literal: " Comment", Range: util.Range{
+				Start: util.Position{Line: 2, Column: 1, Offset: 11},
+				End:   util.Position{Line: 2, Column: 10, Offset: 20},
 			}},
-			{Type: token.EOF, Literal: "", Range: &util.Range{
-				Start: &util.Position{Line: 2, Column: 10, Offset: 20},
-				End:   &util.Position{Line: 2, Column: 10, Offset: 20},
+			{Type: token.EOF, Literal: "", Range: util.Range{
+				Start: util.Position{Line: 2, Column: 10, Offset: 20},
+				End:   util.Position{Line: 2, Column: 10, Offset: 20},
 			}},
 		}},
 		{input: "_ Heading\n\n  Paragraph\n continued", expects: []token.Token{
-			{Type: token.HEADING, Literal: "_ Heading", Range: &util.Range{
-				Start: &util.Position{Line: 1, Column: 0, Offset: 0},
-				End:   &util.Position{Line: 1, Column: 9, Offset: 9},
+			{Type: token.HEADING, Literal: "_ Heading", Range: util.Range{
+				Start: util.Position{Line: 1, Column: 0, Offset: 0},
+				End:   util.Position{Line: 1, Column: 9, Offset: 9},
 			}},
-			{Type: token.PARAGRAPH, Literal: "  Paragraph\n continued", Range: &util.Range{
-				Start: &util.Position{Line: 3, Column: 0, Offset: 11},
-				End:   &util.Position{Line: 4, Column: 10, Offset: 33},
+			{Type: token.PARAGRAPH, Literal: "  Paragraph\n continued", Range: util.Range{
+				Start: util.Position{Line: 3, Column: 0, Offset: 11},
+				End:   util.Position{Line: 4, Column: 10, Offset: 33},
 			}},
-			{Type: token.EOF, Literal: "", Range: &util.Range{
-				Start: &util.Position{Line: 4, Column: 10, Offset: 33},
-				End:   &util.Position{Line: 4, Column: 10, Offset: 33},
+			{Type: token.EOF, Literal: "", Range: util.Range{
+				Start: util.Position{Line: 4, Column: 10, Offset: 33},
+				End:   util.Position{Line: 4, Column: 10, Offset: 33},
 			}},
 		}},
 	})

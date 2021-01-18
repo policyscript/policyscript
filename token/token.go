@@ -21,7 +21,7 @@ type (
 		Literal string
 
 		// Range is the positional range of the token within the source.
-		Range *util.Range
+		Range util.Range
 	}
 )
 
