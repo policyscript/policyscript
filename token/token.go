@@ -26,12 +26,7 @@ type (
 )
 
 func (t Token) String() string {
-	return fmt.Sprintf("%10s [%4d, %4d, %4d]  [%4d, %4d, %4d] %q",
-		t.Type,
-		t.Range.Start.Line, t.Range.Start.Column, t.Range.Start.Offset,
-		t.Range.End.Line, t.Range.End.Column, t.Range.End.Offset,
-		t.Literal,
-	)
+	return fmt.Sprintf("%s: %s | %q", t.Type, t.Literal, t.Range.String())
 }
 
 const (
@@ -82,6 +77,7 @@ const (
 
 	// Keywords.
 	IF    Type = "if"
+	ELSE  Type = "else"
 	FOR   Type = "for"
 	IN    Type = "in"
 	SET   Type = "set"
@@ -152,6 +148,7 @@ func LookupPeriodKeyword(input []rune) bool {
 
 var keywords = map[string]Type{
 	"if":    IF,
+	"else":  ELSE,
 	"for":   FOR,
 	"in":    IN,
 	"set":   SET,

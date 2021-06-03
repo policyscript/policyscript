@@ -28,7 +28,7 @@ type Scanner struct {
 }
 
 // An ErrorHandler is called with each error the scanner finds.
-type ErrorHandler func(msg string, pos util.Position)
+type ErrorHandler func(msg string, rng util.Range)
 
 // New initializes a new Scanner.
 func New(input []byte, err ErrorHandler) *Scanner {
@@ -54,23 +54,16 @@ func (s *Scanner) Scan() []token.Token {
 	var tokens []token.Token
 
 	for !s.isAtEnd() {
-		tokens = append(tokens, *s.nextToken())
+		tokens = append(tokens, *s.NextToken())
 	}
 
 	// EOF token.
-	tokens = append(tokens, *s.nextToken())
+	tokens = append(tokens, *s.NextToken())
 
 	return tokens
 }
 
-func (s *Scanner) error(msg string, pos *util.Position) {
-	if s.err != nil {
-		s.err(msg, *pos)
-	}
-	s.ErrorCount++
-}
-
-func (s *Scanner) nextToken() *token.Token {
+func (s *Scanner) NextToken() *token.Token {
 	// Special scanning for when we are inside a block.
 	if s.block {
 		return s.nextBlockToken()
@@ -128,6 +121,17 @@ func (s *Scanner) nextToken() *token.Token {
 	return s.readParagraph(start)
 }
 
+func (s *Scanner) error(msg string, rng *util.Range) {
+	if s.err != nil {
+		s.err(msg, *rng)
+	}
+	s.ErrorCount++
+}
+
+func (s *Scanner) errorPos(msg string, start *util.Position, end *util.Position) {
+	s.error(msg, &util.Range{Start: *start, End: *end})
+}
+
 func (s *Scanner) nextBlockToken() *token.Token {
 	line := s.line
 	start := s.getPosition()
@@ -146,7 +150,7 @@ func (s *Scanner) nextBlockToken() *token.Token {
 		// End block.
 		s.block = false
 		position := s.getPosition()
-		s.error("block does not have closing \"}\"", position)
+		s.errorPos("block does not have closing \"}\"", position, position)
 		return makeToken(token.EOF, nil, position, position)
 	case '}':
 		// End block.
@@ -223,16 +227,16 @@ func (s *Scanner) nextBlockToken() *token.Token {
 func (s *Scanner) readText() *token.Token {
 	start := s.getPosition()
 	s.next()
-	textStart := s.offset
+	textStart := s.getPosition()
 
 	for s.ch != '`' && !s.isAtEnd() {
 		s.next()
 	}
 
-	literal := s.input[textStart:s.offset]
+	literal := s.input[textStart.Offset:s.offset]
 
 	if s.isAtEnd() {
-		s.error("text does not have closing \"`\"", start)
+		s.errorPos("text does not have closing \"`\"", start, textStart)
 	} else {
 		s.next()
 	}
@@ -323,7 +327,7 @@ func (s *Scanner) readDate(start *util.Position) {
 	if s.ch == '|' {
 		s.next()
 	} else {
-		s.error("invalid date", start)
+		s.errorPos("invalid date", start, s.getPosition())
 	}
 }
 
@@ -334,7 +338,7 @@ func (s *Scanner) readTime(start *util.Position) {
 	if s.ch == '|' {
 		s.next()
 	} else {
-		s.error("invalid time", start)
+		s.errorPos("invalid time", start, s.getPosition())
 	}
 }
 
